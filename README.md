@@ -19,12 +19,31 @@ streamlit run app.py
 
 在側邊欄輸入以逗號分隔的股票代號（例如 `AAPL, MSFT, NVDA`）、選擇時間範圍、無風險利率與建議買賣標的數量，即可在五個分頁查看分析結果。
 
+## 部署到 Streamlit Community Cloud（免費，分享給他人）
+
+部署後會得到一個公開網址（例如 `https://你的app名稱.streamlit.app`），任何人點連結即可使用，不需安裝任何東西。
+
+1. 確認程式碼已推送到 GitHub（`app.py`、`requirements.txt`、`.streamlit/config.toml` 都在 repo 內）。
+2. 前往 [share.streamlit.io](https://share.streamlit.io)，用 GitHub 帳號登入並授權。
+3. 點 **Create app** → **Deploy a public app from GitHub**。
+4. 填入：
+   - **Repository**：`你的帳號/0518test`
+   - **Branch**：要部署的分支（例如 `main`）
+   - **Main file path**：`app.py`
+5. 點 **Deploy**，等待約 1～3 分鐘安裝相依套件並啟動。
+6. 完成後即可分享網址。之後每次 push 到該分支，App 會自動重新部署為最新版。
+
+> 本專案已內含 `.streamlit/config.toml`，部署時會自動套用主題與伺服器設定，無需額外調整。
+> Community Cloud 的對外網路可正常連線 Yahoo Finance，因此線上版能抓取真實股價資料。
+
 ## 專案結構
 
 ```
-app.py              # Streamlit 主程式（頁面與圖表）
-src/data_loader.py  # yfinance 資料存取（含快取）
-src/technical.py    # 技術指標計算（SMA/EMA/RSI/MACD/Bollinger）
-src/risk.py         # 風險與統計指標計算
-src/recommend.py    # 買賣建議綜合評分計算
+app.py                  # Streamlit 主程式（頁面與圖表）
+.streamlit/config.toml  # 主題與伺服器設定（部署時自動套用）
+requirements.txt        # Python 相依套件
+src/data_loader.py      # yfinance 資料存取（含快取）
+src/technical.py        # 技術指標計算（SMA/EMA/RSI/MACD/Bollinger）
+src/risk.py             # 風險與統計指標計算
+src/recommend.py        # 買賣建議綜合評分計算
 ```
