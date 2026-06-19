@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src import data_loader as dl
+from src import recommend
 from src import risk
 from src import technical as ta
 
@@ -22,6 +23,7 @@ with st.sidebar:
     period_label = st.selectbox("時間範圍", list(PERIOD_OPTIONS.keys()), index=3)
     period = PERIOD_OPTIONS[period_label]
     risk_free_rate = st.number_input("無風險利率（年化，%）", value=4.0, step=0.1) / 100
+    top_n = st.selectbox("建議買賣標的數量 (Top N)", [1, 5, 10, 15], index=2)
 
 if not tickers:
     st.warning("請至少輸入一個股票代號。")
@@ -29,8 +31,8 @@ if not tickers:
 
 primary = tickers[0]
 
-tab_price, tab_fundamentals, tab_compare, tab_risk = st.tabs(
-    ["📈 價格與技術指標", "🧾 基本面財務", "🔗 多股比較與關聯", "⚖️ 風險與統計"]
+tab_price, tab_fundamentals, tab_compare, tab_risk, tab_reco = st.tabs(
+    ["📈 價格與技術指標", "🧾 基本面財務", "🔗 多股比較與關聯", "⚖️ 風險與統計", "💡 買賣建議"]
 )
 
 # ---------- Tab 1: Price & Technical ----------
@@ -164,3 +166,35 @@ with tab_risk:
         st.plotly_chart(hist_fig, use_container_width=True)
     else:
         st.warning("無可用資料以計算風險指標。")
+
+# ---------- Tab 5: Buy/sell recommendations ----------
+with tab_reco:
+    st.subheader("基金經理人觀點：建議買入 / 賣出")
+    st.caption(
+        "綜合「期間報酬率」「Sharpe Ratio」「價格趨勢（價格 / SMA50）」「估值（1/預估PE）」"
+        "四項因子計算組內相對評分，僅反映目前清單內標的之相對排序，非投資建議。"
+    )
+    reco_table = recommend.build_recommendation_table(tickers, period, risk_free_rate)
+    if reco_table.empty:
+        st.warning("無足夠資料產生建議，請確認股票代號或時間範圍。")
+    else:
+        buy_df, sell_df = recommend.top_buy_sell(reco_table, top_n)
+
+        def _format_reco(df: pd.DataFrame) -> pd.DataFrame:
+            fmt = df.copy()
+            for col in ["期間報酬率", "趨勢(價格/SMA50)"]:
+                fmt[col] = fmt[col].apply(lambda v: f"{v * 100:.2f}%" if pd.notnull(v) else None)
+            for col in ["Sharpe Ratio", "估值(1/預估PE)", "RSI (14)", "綜合評分"]:
+                fmt[col] = fmt[col].apply(lambda v: f"{v:.2f}" if pd.notnull(v) else None)
+            return fmt
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"#### 🟢 建議買入 Top {len(buy_df)}")
+            st.dataframe(_format_reco(buy_df), use_container_width=True)
+        with col2:
+            st.markdown(f"#### 🔴 建議賣出 Top {len(sell_df)}")
+            st.dataframe(_format_reco(sell_df), use_container_width=True)
+
+        if len(reco_table) < top_n:
+            st.info(f"目前清單僅有 {len(reco_table)} 檔標的，少於選擇的 Top {top_n}，已顯示全部可用標的。")
