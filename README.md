@@ -17,7 +17,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-在側邊欄輸入以逗號分隔的股票代號（例如 `AAPL, MSFT, NVDA`）、選擇時間範圍、無風險利率與建議買賣標的數量，即可在五個分頁查看分析結果。
+在側邊欄輸入以逗號分隔的股票代號（例如 `AAPL, MSFT, NVDA`）、選擇時間範圍、無風險利率與建議買賣標的數量，即可在五個分頁查看分析結果。**股票代號欄位留空則代表「全部」，會自動帶入 S&P 500 全部成分股**（清單即時從 Wikipedia 抓取，若無網路則退回一份內建的知名成分股清單）；標的數量較多時，比較圖表會自動裁切前 30 檔以維持可讀性與效能，基本面表格、風險統計表與買賣建議掃描則仍處理全部標的。
 
 ## 部署到 Streamlit Community Cloud（免費，分享給他人）
 
@@ -46,4 +46,5 @@ src/data_loader.py      # yfinance 資料存取（含快取）
 src/technical.py        # 技術指標計算（SMA/EMA/RSI/MACD/Bollinger）
 src/risk.py             # 風險與統計指標計算
 src/recommend.py        # 買賣建議綜合評分計算
+src/universe.py         # S&P 500 成分股清單（即時抓取 + 內建備援）
 ```

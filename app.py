@@ -8,6 +8,7 @@ from src import data_loader as dl
 from src import recommend
 from src import risk
 from src import technical as ta
+from src import universe
 
 st.set_page_config(page_title="美股分析師看板", layout="wide")
 
@@ -15,19 +16,30 @@ PERIOD_OPTIONS = {
     "1個月": "1mo", "3個月": "3mo", "6個月": "6mo",
     "1年": "1y", "2年": "2y", "5年": "5y",
 }
+# Charts that render one trace/row per ticker (comparison overlay, correlation
+# heatmap, distribution histogram) become unreadable and slow past this many
+# tickers, so those views are capped — tables and the recommendation scan
+# still use the full list.
+MAX_CHART_TICKERS = 30
 
 with st.sidebar:
     st.title("📊 美股分析師看板")
-    tickers_input = st.text_input("股票代號（逗號分隔）", value="AAPL, MSFT, NVDA")
-    tickers = [t.strip().upper() for t in tickers_input.split(",") if t.strip()]
+    tickers_input = st.text_input(
+        "股票代號（逗號分隔；留空代表全部 S&P 500 成分股）", value="AAPL, MSFT, NVDA")
+    raw_input = tickers_input.strip()
+    if raw_input:
+        tickers = [t.strip().upper() for t in raw_input.split(",") if t.strip()]
+        use_all = False
+    else:
+        tickers = universe.get_sp500_tickers()
+        use_all = True
     period_label = st.selectbox("時間範圍", list(PERIOD_OPTIONS.keys()), index=3)
     period = PERIOD_OPTIONS[period_label]
     risk_free_rate = st.number_input("無風險利率（年化，%）", value=4.0, step=0.1) / 100
     top_n = st.selectbox("建議買賣標的數量 (Top N)", [1, 5, 10, 15], index=2)
-
-if not tickers:
-    st.warning("請至少輸入一個股票代號。")
-    st.stop()
+    if use_all:
+        st.caption(f"已自動帶入全部 S&P 500 成分股（{len(tickers)} 檔）。首次掃描資料量大，"
+                   "請耐心等候，結果會快取加速下次載入。")
 
 primary = tickers[0]
 
@@ -108,6 +120,9 @@ with tab_fundamentals:
         numeric_cols = ["P/E (TTM)", "預估 P/E", "P/B", "Beta"]
         plot_df = fdf[numeric_cols].apply(pd.to_numeric, errors="coerce")
         if plot_df.notna().any().any():
+            if len(plot_df) > MAX_CHART_TICKERS:
+                st.info(f"標的數量較多（{len(plot_df)} 檔），圖表僅顯示前 {MAX_CHART_TICKERS} 檔以維持可讀性。")
+                plot_df = plot_df.head(MAX_CHART_TICKERS)
             metric = st.selectbox("比較指標", numeric_cols)
             bar_fig = go.Figure(go.Bar(x=plot_df.index, y=plot_df[metric]))
             bar_fig.update_layout(height=350, title=f"{metric} 比較", margin=dict(t=40, b=10))
@@ -116,8 +131,12 @@ with tab_fundamentals:
 # ---------- Tab 3: Multi-stock comparison & correlation ----------
 with tab_compare:
     st.subheader("多股票報酬比較與相關性")
-    close_df = dl.get_multi_close(tickers, period=period)
-    if close_df.empty or len(tickers) < 2:
+    compare_tickers = tickers
+    if len(tickers) > MAX_CHART_TICKERS:
+        st.info(f"標的數量較多（{len(tickers)} 檔），圖表僅顯示前 {MAX_CHART_TICKERS} 檔以維持可讀性與效能。")
+        compare_tickers = tickers[:MAX_CHART_TICKERS]
+    close_df = dl.get_multi_close(compare_tickers, period=period)
+    if close_df.empty or len(compare_tickers) < 2:
         st.info("請輸入至少兩個股票代號以進行比較。")
     else:
         normalized = close_df / close_df.iloc[0] * 100
@@ -141,9 +160,11 @@ with tab_compare:
 with tab_risk:
     st.subheader("風險與統計分析")
     rows = {}
+    price_by_ticker = {}
     for t in tickers:
         df_t = dl.get_price_history(t, period=period)
         if not df_t.empty:
+            price_by_ticker[t] = df_t
             rows[t] = risk.risk_summary(df_t["Close"], risk_free_rate)
     if rows:
         summary_df = pd.DataFrame(rows).T
@@ -155,12 +176,14 @@ with tab_risk:
         st.dataframe(fmt, use_container_width=True)
 
         st.markdown("#### 日報酬率分布")
+        hist_tickers = list(price_by_ticker.keys())
+        if len(hist_tickers) > MAX_CHART_TICKERS:
+            st.caption(f"標的數量較多，分布圖僅顯示前 {MAX_CHART_TICKERS} 檔以維持可讀性。")
+            hist_tickers = hist_tickers[:MAX_CHART_TICKERS]
         hist_fig = go.Figure()
-        for t in tickers:
-            df_t = dl.get_price_history(t, period=period)
-            if not df_t.empty:
-                rets = risk.daily_returns(df_t["Close"]) * 100
-                hist_fig.add_trace(go.Histogram(x=rets, name=t, opacity=0.6, nbinsx=60))
+        for t in hist_tickers:
+            rets = risk.daily_returns(price_by_ticker[t]["Close"]) * 100
+            hist_fig.add_trace(go.Histogram(x=rets, name=t, opacity=0.6, nbinsx=60))
         hist_fig.update_layout(barmode="overlay", height=350,
                                 xaxis_title="日報酬率 (%)", margin=dict(t=20, b=10))
         st.plotly_chart(hist_fig, use_container_width=True)
@@ -176,7 +199,11 @@ with tab_reco:
         "買入價／賣出價以最新收盤價估算，目標區間為單純假設 3~5% 價格波動，"
         "未考慮基本面或市場狀況，僅供參考。"
     )
-    reco_table = recommend.build_recommendation_table(tickers, period, risk_free_rate)
+    if len(tickers) > MAX_CHART_TICKERS:
+        with st.spinner(f"正在掃描 {len(tickers)} 檔標的計算評分，資料量較大可能需要數分鐘…"):
+            reco_table = recommend.build_recommendation_table(tickers, period, risk_free_rate)
+    else:
+        reco_table = recommend.build_recommendation_table(tickers, period, risk_free_rate)
     if reco_table.empty:
         st.warning("無足夠資料產生建議，請確認股票代號或時間範圍。")
     else:
