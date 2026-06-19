@@ -173,12 +173,16 @@ with tab_reco:
     st.caption(
         "綜合「期間報酬率」「Sharpe Ratio」「價格趨勢（價格 / SMA50）」「估值（1/預估PE）」"
         "四項因子計算組內相對評分，僅反映目前清單內標的之相對排序，非投資建議。"
+        "買入價／賣出價以最新收盤價估算，目標區間為單純假設 3~5% 價格波動，"
+        "未考慮基本面或市場狀況，僅供參考。"
     )
     reco_table = recommend.build_recommendation_table(tickers, period, risk_free_rate)
     if reco_table.empty:
         st.warning("無足夠資料產生建議，請確認股票代號或時間範圍。")
     else:
         buy_df, sell_df = recommend.top_buy_sell(reco_table, top_n)
+        buy_df = recommend.add_price_targets(buy_df, "buy")
+        sell_df = recommend.add_price_targets(sell_df, "sell")
 
         def _format_reco(df: pd.DataFrame) -> pd.DataFrame:
             fmt = df.copy()
@@ -186,6 +190,9 @@ with tab_reco:
                 fmt[col] = fmt[col].apply(lambda v: f"{v * 100:.2f}%" if pd.notnull(v) else None)
             for col in ["Sharpe Ratio", "估值(1/預估PE)", "RSI (14)", "綜合評分"]:
                 fmt[col] = fmt[col].apply(lambda v: f"{v:.2f}" if pd.notnull(v) else None)
+            for col in ["建議買入價", "建議賣出價"]:
+                if col in fmt:
+                    fmt[col] = fmt[col].apply(lambda v: f"${v:,.2f}" if pd.notnull(v) else None)
             return fmt
 
         col1, col2 = st.columns(2)

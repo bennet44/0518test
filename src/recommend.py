@@ -37,6 +37,7 @@ def build_recommendation_table(tickers: list[str], period: str, risk_free_rate: 
         info = dl.get_company_info(t)
         pe = info.get("forwardPE") or info.get("trailingPE")
         rows[t] = {
+            "最新收盤價": close.iloc[-1],
             "期間報酬率": close.iloc[-1] / close.iloc[0] - 1,
             "Sharpe Ratio": risk_mod.sharpe_ratio(rets, risk_free_rate),
             "趨勢(價格/SMA50)": (close.iloc[-1] / sma50 - 1) if pd.notna(sma50) and sma50 else np.nan,
@@ -70,3 +71,30 @@ def top_buy_sell(table: pd.DataFrame, n: int) -> tuple[pd.DataFrame, pd.DataFram
     buy = sorted_desc.head(n_eff)
     sell = sorted_desc.tail(n_eff).iloc[::-1]
     return buy, sell
+
+
+PROFIT_LOW, PROFIT_HIGH = 0.03, 0.05
+
+
+def add_price_targets(df: pd.DataFrame, side: str) -> pd.DataFrame:
+    """Attach a naive entry price and a 3~5% target price range.
+
+    side="buy": target is the price at which to take profit (entry + 3~5%).
+    side="sell": target is a pullback price worth watching to buy back in
+    (entry - 3~5%), since "sell" here means reduce/avoid, not short selling.
+    """
+    out = df.copy()
+    price = out["最新收盤價"].astype(float)
+    if side == "buy":
+        out["建議買入價"] = price
+        out["目標賣出價(獲利3~5%)"] = [
+            f"${p * (1 + PROFIT_LOW):,.2f} ~ ${p * (1 + PROFIT_HIGH):,.2f}" if pd.notnull(p) else None
+            for p in price
+        ]
+    else:
+        out["建議賣出價"] = price
+        out["逢低買回參考價(回落3~5%)"] = [
+            f"${p * (1 - PROFIT_HIGH):,.2f} ~ ${p * (1 - PROFIT_LOW):,.2f}" if pd.notnull(p) else None
+            for p in price
+        ]
+    return out.drop(columns=["最新收盤價"])
