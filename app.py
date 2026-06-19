@@ -196,5 +196,8 @@ with tab_reco:
             st.markdown(f"#### 🔴 建議賣出 Top {len(sell_df)}")
             st.dataframe(_format_reco(sell_df), use_container_width=True)
 
-        if len(reco_table) < top_n:
-            st.info(f"目前清單僅有 {len(reco_table)} 檔標的，少於選擇的 Top {top_n}，已顯示全部可用標的。")
+        if len(buy_df) < top_n:
+            st.info(
+                f"目前清單共 {len(reco_table)} 檔標的，為避免買入／賣出名單重複，"
+                f"已各自裁切為 {len(buy_df)} 檔（最多取清單一半），而非選擇的 Top {top_n}。"
+            )

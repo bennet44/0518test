@@ -55,9 +55,18 @@ def build_recommendation_table(tickers: list[str], period: str, risk_free_rate: 
 
 
 def top_buy_sell(table: pd.DataFrame, n: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split the ranked table into disjoint buy/sell groups.
+
+    Caps each side at len(table)//2 so a small candidate list never lets the
+    same ticker appear in both the buy and sell lists.
+    """
     if table.empty:
         return table, table
-    n = min(n, len(table))
-    buy = table.sort_values("綜合評分", ascending=False).head(n)
-    sell = table.sort_values("綜合評分", ascending=True).head(n)
+    sorted_desc = table.sort_values("綜合評分", ascending=False)
+    total = len(sorted_desc)
+    if total == 1:
+        return sorted_desc, sorted_desc.iloc[0:0]
+    n_eff = min(n, total // 2)
+    buy = sorted_desc.head(n_eff)
+    sell = sorted_desc.tail(n_eff).iloc[::-1]
     return buy, sell
