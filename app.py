@@ -41,14 +41,13 @@ with st.sidebar:
         st.caption(f"已自動帶入全部 S&P 500 成分股（{len(tickers)} 檔）。首次掃描資料量大，"
                    "請耐心等候，結果會快取加速下次載入。")
 
-primary = tickers[0]
-
 tab_price, tab_fundamentals, tab_compare, tab_risk, tab_reco = st.tabs(
     ["📈 價格與技術指標", "🧾 基本面財務", "🔗 多股比較與關聯", "⚖️ 風險與統計", "💡 買賣建議"]
 )
 
 # ---------- Tab 1: Price & Technical ----------
 with tab_price:
+    primary = st.text_input("股票代號", value="AAPL", key="price_ticker").strip().upper() or "AAPL"
     st.subheader(f"{primary} 價格與技術指標")
     df = dl.get_price_history(primary, period=period)
     if df.empty:
