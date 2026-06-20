@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src import data_loader as dl
+from src import news
 from src import recommend
 from src import risk
 from src import technical as ta
@@ -103,6 +104,19 @@ with tab_overview:
                     lambda v: f"{v * 100:.2f}%" if pd.notnull(v) else None)
         st.dataframe(display, use_container_width=True)
 
+    st.divider()
+    st.subheader(f"{primary} 相關新聞（今日／昨日）")
+    company_name = (
+        fdf["公司名稱"].iloc[0] if not fdf.empty and "公司名稱" in fdf and pd.notnull(fdf["公司名稱"].iloc[0]) else None
+    )
+    news_items = news.get_recent_news(primary, company_name)
+    if not news_items:
+        st.info("暫無今日或昨日的相關中文新聞。")
+    else:
+        for n in news_items:
+            published_str = n["published"].strftime("%Y-%m-%d %H:%M UTC")
+            st.markdown(f"- [{n['title']}]({n['link']})　_{n['source']}｜{published_str}_")
+
 # ---------- Tab 2: Multi-stock comparison, correlation & risk stats ----------
 with tab_compare_risk:
     compare_input = st.text_input(
@@ -181,7 +195,8 @@ with tab_reco:
     st.caption(
         "篩選範圍為「美股交易量前 30 大（依近期平均成交量排序的觀察名單）」"
         "與「S&P 500 成分股」的聯集。綜合「期間報酬率」「Sharpe Ratio」"
-        "「價格趨勢（價格 / SMA50）」「估值（1/預估PE）」四項因子計算組內相對評分，"
+        "「價格趨勢（價格 / SMA50）」「估值（1/預估PE）」"
+        "「新聞情緒（近兩日中文新聞標題關鍵字判斷）」五項因子計算組內相對評分，"
         "僅反映目前範圍內標的之相對排序，非投資建議。"
         "買入價／賣出價以最新收盤價估算，目標區間為單純假設 3~5% 價格波動，"
         "未考慮基本面或市場狀況，僅供參考。"
@@ -200,7 +215,7 @@ with tab_reco:
             fmt = df.copy()
             for col in ["期間報酬率", "趨勢(價格/SMA50)"]:
                 fmt[col] = fmt[col].apply(lambda v: f"{v * 100:.2f}%" if pd.notnull(v) else None)
-            for col in ["Sharpe Ratio", "估值(1/預估PE)", "RSI (14)", "綜合評分"]:
+            for col in ["Sharpe Ratio", "估值(1/預估PE)", "新聞情緒", "RSI (14)", "綜合評分"]:
                 fmt[col] = fmt[col].apply(lambda v: f"{v:.2f}" if pd.notnull(v) else None)
             for col in ["建議買入價", "建議賣出價"]:
                 if col in fmt:

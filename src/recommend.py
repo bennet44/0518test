@@ -1,21 +1,28 @@
 """Buy/sell recommendation scoring — a fund-manager-style composite score.
 
-Combines momentum, risk-adjusted return, trend, and valuation into a single
-cross-sectional z-score so candidates can be ranked against each other.
+Combines momentum, risk-adjusted return, trend, valuation, and news
+sentiment into a single cross-sectional z-score so candidates can be ranked
+against each other.
 """
+import concurrent.futures
+
 import numpy as np
 import pandas as pd
 
 from . import data_loader as dl
+from . import news as news_mod
 from . import risk as risk_mod
 from . import technical as ta
 
 FACTOR_WEIGHTS = {
-    "期間報酬率": 0.3,
-    "Sharpe Ratio": 0.3,
-    "趨勢(價格/SMA50)": 0.2,
-    "估值(1/預估PE)": 0.2,
+    "期間報酬率": 0.25,
+    "Sharpe Ratio": 0.25,
+    "趨勢(價格/SMA50)": 0.15,
+    "估值(1/預估PE)": 0.15,
+    "新聞情緒": 0.2,
 }
+
+_NEWS_FETCH_WORKERS = 12
 
 
 def _zscore(series: pd.Series) -> pd.Series:
@@ -25,8 +32,14 @@ def _zscore(series: pd.Series) -> pd.Series:
     return (series - series.mean()) / std
 
 
+def _news_sentiment(ticker: str, company_name: str | None) -> float:
+    items = news_mod.get_recent_news(ticker, company_name)
+    return news_mod.news_sentiment_score(items)
+
+
 def build_recommendation_table(tickers: list[str], period: str, risk_free_rate: float = 0.0) -> pd.DataFrame:
     rows = {}
+    company_names = {}
     for t in tickers:
         df = dl.get_price_history(t, period=period)
         if df.empty or len(df) < 2:
@@ -36,6 +49,7 @@ def build_recommendation_table(tickers: list[str], period: str, risk_free_rate: 
         sma50 = ta.sma(close, 50).iloc[-1]
         info = dl.get_company_info(t)
         pe = info.get("forwardPE") or info.get("trailingPE")
+        company_names[t] = info.get("shortName")
         rows[t] = {
             "最新收盤價": close.iloc[-1],
             "期間報酬率": close.iloc[-1] / close.iloc[0] - 1,
@@ -44,6 +58,18 @@ def build_recommendation_table(tickers: list[str], period: str, risk_free_rate: 
             "估值(1/預估PE)": (1 / pe) if pe and pe > 0 else np.nan,
             "RSI (14)": ta.rsi(close).iloc[-1],
         }
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=_NEWS_FETCH_WORKERS) as pool:
+        futures = {
+            pool.submit(_news_sentiment, t, company_names.get(t)): t for t in rows
+        }
+        for future in concurrent.futures.as_completed(futures):
+            t = futures[future]
+            try:
+                rows[t]["新聞情緒"] = future.result()
+            except Exception:
+                rows[t]["新聞情緒"] = 0.0
+
     table = pd.DataFrame(rows).T
     if table.empty:
         return table
