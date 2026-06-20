@@ -107,13 +107,14 @@ with tab_overview:
         st.dataframe(display, use_container_width=True)
 
     st.divider()
-    st.subheader(f"{primary} 相關新聞（今日／昨日）")
+    news_date_label = news.recent_news_date_label()
+    st.subheader(f"{primary} 相關新聞（{news_date_label}）")
     company_name = (
         fdf["公司名稱"].iloc[0] if not fdf.empty and "公司名稱" in fdf and pd.notnull(fdf["公司名稱"].iloc[0]) else None
     )
     news_items = news.get_recent_news(primary, company_name)
     if not news_items:
-        st.info("暫無今日或昨日的相關中文新聞。")
+        st.info(f"暫無 {news_date_label} 的相關中文新聞。")
     else:
         for n in news_items:
             published_str = n["published"].strftime("%Y-%m-%d %H:%M UTC")
@@ -224,8 +225,8 @@ with tab_reco:
         st.warning("無足夠資料產生建議，請確認時間範圍。")
     else:
         buy_df, sell_df = recommend.top_buy_sell(reco_table, top_n)
-        buy_df = recommend.add_price_targets(buy_df, "buy")
-        sell_df = recommend.add_price_targets(sell_df, "sell")
+        buy_df = recommend.add_reason(recommend.add_price_targets(buy_df, "buy"), "buy")
+        sell_df = recommend.add_reason(recommend.add_price_targets(sell_df, "sell"), "sell")
 
         def _format_reco(df: pd.DataFrame) -> pd.DataFrame:
             fmt = df.copy()

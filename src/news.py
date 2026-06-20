@@ -23,11 +23,12 @@ _NEGATIVE_WORDS = [
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_recent_news(ticker: str, company_name: str | None = None, days: int = 2) -> list[dict]:
+def get_recent_news(ticker: str, company_name: str | None = None, days: int = 4) -> list[dict]:
     """Fetch recent Chinese-language headlines for a ticker from Google News RSS.
 
-    Returns headlines whose publish date falls on today or yesterday (UTC),
-    newest first. Returns [] on any network or parse failure.
+    Returns headlines whose publish date falls within the last `days` days
+    (today and the `days - 1` days before it, UTC), newest first. Returns []
+    on any network or parse failure.
     """
     query = f"{company_name} {ticker} 股票" if company_name else f"{ticker} 股票"
     url = _RSS_URL.format(query=urllib.parse.quote(query))
@@ -58,6 +59,13 @@ def get_recent_news(ticker: str, company_name: str | None = None, days: int = 2)
         items.append({"title": title, "link": link, "source": source, "published": published})
     items.sort(key=lambda x: x["published"], reverse=True)
     return items
+
+
+def recent_news_date_label(days: int = 4) -> str:
+    """Human-readable date range matching get_recent_news's window, e.g. '6/17-6/20'."""
+    today = dt.datetime.now(dt.timezone.utc).date()
+    start = today - dt.timedelta(days=days - 1)
+    return f"{start.month}/{start.day}-{today.month}/{today.day}"
 
 
 def news_sentiment_score(news_items: list[dict]) -> float:

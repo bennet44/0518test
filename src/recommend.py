@@ -24,6 +24,15 @@ FACTOR_WEIGHTS = {
 
 _NEWS_FETCH_WORKERS = 12
 
+_FACTOR_LABELS = {
+    "期間報酬率": "期間報酬率",
+    "Sharpe Ratio": "風險調整後報酬(Sharpe)",
+    "趨勢(價格/SMA50)": "價格趨勢(相對SMA50)",
+    "估值(1/預估PE)": "估值水準",
+    "新聞情緒": "新聞情緒",
+}
+_CONTRIB_PREFIX = "_contrib_"
+
 
 def _zscore(series: pd.Series) -> pd.Series:
     std = series.std()
@@ -76,7 +85,9 @@ def build_recommendation_table(tickers: list[str], period: str, risk_free_rate: 
 
     score = pd.Series(0.0, index=table.index)
     for factor, weight in FACTOR_WEIGHTS.items():
-        score = score + _zscore(table[factor].astype(float)) * weight
+        contribution = _zscore(table[factor].astype(float)) * weight
+        table[_CONTRIB_PREFIX + factor] = contribution
+        score = score + contribution
     table["綜合評分"] = score
     return table.sort_values("綜合評分", ascending=False)
 
@@ -124,3 +135,30 @@ def add_price_targets(df: pd.DataFrame, side: str) -> pd.DataFrame:
             for p in price
         ]
     return out.drop(columns=["最新收盤價"])
+
+
+def add_reason(df: pd.DataFrame, side: str) -> pd.DataFrame:
+    """Append a "原因說明" column naming the factors driving each pick.
+
+    side="buy": names the factors that scored best relative to the group.
+    side="sell": names the factors that scored worst relative to the group.
+    Reads the hidden per-factor score contributions stashed by
+    build_recommendation_table and drops them once the explanation is built.
+    """
+    contrib_cols = [c for c in df.columns if c.startswith(_CONTRIB_PREFIX)]
+    reasons = []
+    for _, row in df.iterrows():
+        contribs = {
+            _FACTOR_LABELS[c[len(_CONTRIB_PREFIX):]]: row[c]
+            for c in contrib_cols if pd.notnull(row[c])
+        }
+        if not contribs:
+            reasons.append("資料不足")
+            continue
+        ranked = sorted(contribs.items(), key=lambda kv: kv[1], reverse=(side == "buy"))
+        top_labels = [label for label, _ in ranked[:2]]
+        verb = "領先同組" if side == "buy" else "落後同組"
+        reasons.append(f"{'、'.join(top_labels)}{verb}")
+    out = df.drop(columns=contrib_cols)
+    out["原因說明"] = reasons
+    return out
