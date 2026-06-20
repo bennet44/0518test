@@ -12,7 +12,7 @@
 
 ```bash
 pip install -r requirements.txt
-streamlit run 美股趨勢判斷.py
+streamlit run US_Stock_Market_Trends.py
 ```
 
 三個分頁的時間範圍、比較代號、無風險利率與建議買賣標的數量皆為各分頁內各自的欄位（彼此獨立）。「多股比較、相關性與風險統計」分頁的比較代號欄位留空則代表「全部」，會自動帶入 S&P 500 全部成分股（清單即時從 Wikipedia 抓取，若無網路則退回一份內建的知名成分股清單）；標的數量較多時，比較圖表會自動裁切前 30 檔以維持可讀性與效能，風險統計表則仍處理全部標的。
@@ -21,13 +21,13 @@ streamlit run 美股趨勢判斷.py
 
 部署後會得到一個公開網址（例如 `https://你的app名稱.streamlit.app`），任何人點連結即可使用，不需安裝任何東西。
 
-1. 確認程式碼已推送到 GitHub（`美股趨勢判斷.py`、`requirements.txt`、`.streamlit/config.toml` 都在 repo 內）。
+1. 確認程式碼已推送到 GitHub（`US_Stock_Market_Trends.py`、`requirements.txt`、`.streamlit/config.toml` 都在 repo 內）。
 2. 前往 [share.streamlit.io](https://share.streamlit.io)，用 GitHub 帳號登入並授權。
 3. 點 **Create app** → **Deploy a public app from GitHub**。
 4. 填入：
    - **Repository**：`你的帳號/0518test`
    - **Branch**：要部署的分支（例如 `main`）
-   - **Main file path**：`美股趨勢判斷.py`
+   - **Main file path**：`US_Stock_Market_Trends.py`
 5. 點 **Deploy**，等待約 1～3 分鐘安裝相依套件並啟動。
 6. 完成後即可分享網址。之後每次 push 到該分支，App 會自動重新部署為最新版。
 
@@ -37,13 +37,13 @@ streamlit run 美股趨勢判斷.py
 ## 專案結構
 
 ```
-美股趨勢判斷.py          # Streamlit 主程式（頁面與圖表）
-.streamlit/config.toml  # 主題與伺服器設定（部署時自動套用）
-requirements.txt        # Python 相依套件
-src/data_loader.py      # yfinance 資料存取（含快取）
-src/technical.py        # 技術指標計算（SMA/EMA/RSI/MACD/Bollinger）
-src/risk.py             # 風險與統計指標計算
-src/recommend.py        # 買賣建議綜合評分計算
-src/news.py             # 中文新聞抓取（Google News RSS）與關鍵字情緒分析
-src/universe.py         # S&P 500 成分股清單與交易量前 30 大觀察名單（即時抓取 + 內建備援）
+US_Stock_Market_Trends.py  # Streamlit 主程式（頁面與圖表）
+.streamlit/config.toml     # 主題與伺服器設定（部署時自動套用）
+requirements.txt           # Python 相依套件
+src/data_loader.py         # yfinance 資料存取（含快取）
+src/technical.py           # 技術指標計算（SMA/EMA/RSI/MACD/Bollinger）
+src/risk.py                # 風險與統計指標計算
+src/recommend.py           # 買賣建議綜合評分計算
+src/news.py                # 中文新聞抓取（Google News RSS）與關鍵字情緒分析
+src/universe.py            # S&P 500 成分股清單與交易量前 30 大觀察名單（即時抓取 + 內建備援）
 ```
