@@ -22,13 +22,10 @@ PERIOD_OPTIONS = {
 # tickers, so those views are capped — tables and the recommendation scan
 # still use the full list.
 MAX_CHART_TICKERS = 30
-
-with st.sidebar:
-    st.title("📊 美股分析師看板")
-    period_label = st.selectbox("時間範圍", list(PERIOD_OPTIONS.keys()), index=3)
-    period = PERIOD_OPTIONS[period_label]
-    risk_free_rate = st.number_input("無風險利率（年化，%）", value=4.0, step=0.1) / 100
-    top_n = st.selectbox("建議買賣標的數量 (Top N)", [1, 5, 10, 15], index=1)
+# Risk/statistics tab no longer exposes its own risk-free-rate control (that
+# input now lives on the recommendation tab), so its Sharpe Ratio uses this
+# fixed default instead.
+DEFAULT_RISK_FREE_RATE = 0.04
 
 tab_overview, tab_compare_risk, tab_reco = st.tabs(
     ["📈 價格、技術指標與基本面", "🔗 多股比較、相關性與風險統計", "💡 買賣建議"]
@@ -36,7 +33,12 @@ tab_overview, tab_compare_risk, tab_reco = st.tabs(
 
 # ---------- Tab 1: Price, technical indicators & fundamentals (one ticker) ----------
 with tab_overview:
-    primary = st.text_input("股票代號", value="AAPL", key="price_ticker").strip().upper() or "AAPL"
+    col_ticker, col_period = st.columns([2, 1])
+    with col_ticker:
+        primary = st.text_input("股票代號", value="AAPL", key="price_ticker").strip().upper() or "AAPL"
+    with col_period:
+        period_label = st.selectbox("時間範圍", list(PERIOD_OPTIONS.keys()), index=3, key="period_tab1")
+    period = PERIOD_OPTIONS[period_label]
     st.subheader(f"{primary} 價格與技術指標")
     df = dl.get_price_history(primary, period=period)
     if df.empty:
@@ -119,8 +121,13 @@ with tab_overview:
 
 # ---------- Tab 2: Multi-stock comparison, correlation & risk stats ----------
 with tab_compare_risk:
-    compare_input = st.text_input(
-        "比較用股票代號（逗號分隔；留空代表全部 S&P 500 成分股）", value="AAPL, OKLO")
+    col_compare, col_period2 = st.columns([2, 1])
+    with col_compare:
+        compare_input = st.text_input(
+            "比較用股票代號（逗號分隔；留空代表全部 S&P 500 成分股）", value="AAPL, OKLO")
+    with col_period2:
+        period_label = st.selectbox("時間範圍", list(PERIOD_OPTIONS.keys()), index=3, key="period_tab2")
+    period = PERIOD_OPTIONS[period_label]
     raw_compare = compare_input.strip()
     if raw_compare:
         compare_tickers = [t.strip().upper() for t in raw_compare.split(",") if t.strip()]
@@ -164,7 +171,7 @@ with tab_compare_risk:
         df_t = dl.get_price_history(t, period=period)
         if not df_t.empty:
             price_by_ticker[t] = df_t
-            rows[t] = risk.risk_summary(df_t["Close"], risk_free_rate)
+            rows[t] = risk.risk_summary(df_t["Close"], DEFAULT_RISK_FREE_RATE)
     if rows:
         summary_df = pd.DataFrame(rows).T
         fmt = summary_df.copy()
@@ -191,6 +198,15 @@ with tab_compare_risk:
 
 # ---------- Tab 3: Buy/sell recommendations ----------
 with tab_reco:
+    col_period3, col_rfr, col_topn = st.columns(3)
+    with col_period3:
+        period_label = st.selectbox("時間範圍", list(PERIOD_OPTIONS.keys()), index=3, key="period_tab3")
+        period = PERIOD_OPTIONS[period_label]
+    with col_rfr:
+        risk_free_rate = st.number_input("無風險利率（年化，%）", value=4.0, step=0.1, key="rfr_tab3") / 100
+    with col_topn:
+        top_n = st.selectbox("建議買賣標的數量 (Top N)", [1, 5, 10, 15], index=1, key="topn_tab3")
+
     st.subheader("基金經理人觀點：建議買入 / 賣出")
     st.caption(
         "篩選範圍為「美股交易量前 30 大（依近期平均成交量排序的觀察名單）」"
