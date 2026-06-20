@@ -102,7 +102,8 @@ with tab_price:
 # ---------- Tab 2: Fundamentals ----------
 with tab_fundamentals:
     st.subheader("基本面財務數據比較")
-    fdf = dl.get_fundamentals_table(tickers)
+    fundamentals_tickers = list(dict.fromkeys([primary] + tickers))
+    fdf = dl.get_fundamentals_table(fundamentals_tickers)
     if fdf.empty:
         st.warning("無法取得基本面資料。")
     else:
