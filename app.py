@@ -24,29 +24,17 @@ MAX_CHART_TICKERS = 30
 
 with st.sidebar:
     st.title("📊 美股分析師看板")
-    tickers_input = st.text_input(
-        "股票代號（逗號分隔；留空代表全部 S&P 500 成分股）", value="AAPL, MSFT, NVDA")
-    raw_input = tickers_input.strip()
-    if raw_input:
-        tickers = [t.strip().upper() for t in raw_input.split(",") if t.strip()]
-        use_all = False
-    else:
-        tickers = universe.get_sp500_tickers()
-        use_all = True
     period_label = st.selectbox("時間範圍", list(PERIOD_OPTIONS.keys()), index=3)
     period = PERIOD_OPTIONS[period_label]
     risk_free_rate = st.number_input("無風險利率（年化，%）", value=4.0, step=0.1) / 100
-    top_n = st.selectbox("建議買賣標的數量 (Top N)", [1, 5, 10, 15], index=2)
-    if use_all:
-        st.caption(f"已自動帶入全部 S&P 500 成分股（{len(tickers)} 檔）。首次掃描資料量大，"
-                   "請耐心等候，結果會快取加速下次載入。")
+    top_n = st.selectbox("建議買賣標的數量 (Top N)", [1, 5, 10, 15], index=1)
 
-tab_price, tab_fundamentals, tab_compare, tab_risk, tab_reco = st.tabs(
-    ["📈 價格與技術指標", "🧾 基本面財務", "🔗 多股比較與關聯", "⚖️ 風險與統計", "💡 買賣建議"]
+tab_overview, tab_compare_risk, tab_reco = st.tabs(
+    ["📈 價格、技術指標與基本面", "🔗 多股比較、相關性與風險統計", "💡 買賣建議"]
 )
 
-# ---------- Tab 1: Price & Technical ----------
-with tab_price:
+# ---------- Tab 1: Price, technical indicators & fundamentals (one ticker) ----------
+with tab_overview:
     primary = st.text_input("股票代號", value="AAPL", key="price_ticker").strip().upper() or "AAPL"
     st.subheader(f"{primary} 價格與技術指標")
     df = dl.get_price_history(primary, period=period)
@@ -99,11 +87,9 @@ with tab_price:
         st.metric(f"{primary} 最新收盤價", f"${latest:,.2f}",
                    f"{(latest / prev - 1) * 100:.2f}%")
 
-# ---------- Tab 2: Fundamentals ----------
-with tab_fundamentals:
-    st.subheader("基本面財務數據比較")
-    fundamentals_tickers = list(dict.fromkeys([primary] + tickers))
-    fdf = dl.get_fundamentals_table(fundamentals_tickers)
+    st.divider()
+    st.subheader(f"{primary} 基本面財務")
+    fdf = dl.get_fundamentals_table([primary])
     if fdf.empty:
         st.warning("無法取得基本面資料。")
     else:
@@ -117,26 +103,26 @@ with tab_fundamentals:
                     lambda v: f"{v * 100:.2f}%" if pd.notnull(v) else None)
         st.dataframe(display, use_container_width=True)
 
-        numeric_cols = ["P/E (TTM)", "預估 P/E", "P/B", "Beta"]
-        plot_df = fdf[numeric_cols].apply(pd.to_numeric, errors="coerce")
-        if plot_df.notna().any().any():
-            if len(plot_df) > MAX_CHART_TICKERS:
-                st.info(f"標的數量較多（{len(plot_df)} 檔），圖表僅顯示前 {MAX_CHART_TICKERS} 檔以維持可讀性。")
-                plot_df = plot_df.head(MAX_CHART_TICKERS)
-            metric = st.selectbox("比較指標", numeric_cols)
-            bar_fig = go.Figure(go.Bar(x=plot_df.index, y=plot_df[metric]))
-            bar_fig.update_layout(height=350, title=f"{metric} 比較", margin=dict(t=40, b=10))
-            st.plotly_chart(bar_fig, use_container_width=True)
+# ---------- Tab 2: Multi-stock comparison, correlation & risk stats ----------
+with tab_compare_risk:
+    compare_input = st.text_input(
+        "比較用股票代號（逗號分隔；留空代表全部 S&P 500 成分股）", value="AAPL, OKLO")
+    raw_compare = compare_input.strip()
+    if raw_compare:
+        compare_tickers = [t.strip().upper() for t in raw_compare.split(",") if t.strip()]
+    else:
+        compare_tickers = universe.get_sp500_tickers()
+        st.caption(f"已自動帶入全部 S&P 500 成分股（{len(compare_tickers)} 檔）。首次掃描資料量大，"
+                   "請耐心等候，結果會快取加速下次載入。")
 
-# ---------- Tab 3: Multi-stock comparison & correlation ----------
-with tab_compare:
+    chart_tickers = compare_tickers
+    if len(compare_tickers) > MAX_CHART_TICKERS:
+        st.info(f"標的數量較多（{len(compare_tickers)} 檔），圖表僅顯示前 {MAX_CHART_TICKERS} 檔以維持可讀性與效能。")
+        chart_tickers = compare_tickers[:MAX_CHART_TICKERS]
+
     st.subheader("多股票報酬比較與相關性")
-    compare_tickers = tickers
-    if len(tickers) > MAX_CHART_TICKERS:
-        st.info(f"標的數量較多（{len(tickers)} 檔），圖表僅顯示前 {MAX_CHART_TICKERS} 檔以維持可讀性與效能。")
-        compare_tickers = tickers[:MAX_CHART_TICKERS]
-    close_df = dl.get_multi_close(compare_tickers, period=period)
-    if close_df.empty or len(compare_tickers) < 2:
+    close_df = dl.get_multi_close(chart_tickers, period=period)
+    if close_df.empty or len(chart_tickers) < 2:
         st.info("請輸入至少兩個股票代號以進行比較。")
     else:
         normalized = close_df / close_df.iloc[0] * 100
@@ -156,12 +142,11 @@ with tab_compare:
         heat_fig.update_layout(height=400, title="日報酬相關係數矩陣", margin=dict(t=40, b=10))
         st.plotly_chart(heat_fig, use_container_width=True)
 
-# ---------- Tab 4: Risk & statistics ----------
-with tab_risk:
+    st.divider()
     st.subheader("風險與統計分析")
     rows = {}
     price_by_ticker = {}
-    for t in tickers:
+    for t in compare_tickers:
         df_t = dl.get_price_history(t, period=period)
         if not df_t.empty:
             price_by_ticker[t] = df_t
@@ -190,22 +175,22 @@ with tab_risk:
     else:
         st.warning("無可用資料以計算風險指標。")
 
-# ---------- Tab 5: Buy/sell recommendations ----------
+# ---------- Tab 3: Buy/sell recommendations ----------
 with tab_reco:
     st.subheader("基金經理人觀點：建議買入 / 賣出")
     st.caption(
-        "綜合「期間報酬率」「Sharpe Ratio」「價格趨勢（價格 / SMA50）」「估值（1/預估PE）」"
-        "四項因子計算組內相對評分，僅反映目前清單內標的之相對排序，非投資建議。"
+        "篩選範圍為「美股交易量前 30 大（依近期平均成交量排序的觀察名單）」"
+        "與「S&P 500 成分股」的聯集。綜合「期間報酬率」「Sharpe Ratio」"
+        "「價格趨勢（價格 / SMA50）」「估值（1/預估PE）」四項因子計算組內相對評分，"
+        "僅反映目前範圍內標的之相對排序，非投資建議。"
         "買入價／賣出價以最新收盤價估算，目標區間為單純假設 3~5% 價格波動，"
         "未考慮基本面或市場狀況，僅供參考。"
     )
-    if len(tickers) > MAX_CHART_TICKERS:
-        with st.spinner(f"正在掃描 {len(tickers)} 檔標的計算評分，資料量較大可能需要數分鐘…"):
-            reco_table = recommend.build_recommendation_table(tickers, period, risk_free_rate)
-    else:
-        reco_table = recommend.build_recommendation_table(tickers, period, risk_free_rate)
+    reco_universe = sorted(set(universe.get_top_volume_tickers(30)) | set(universe.get_sp500_tickers()))
+    with st.spinner(f"正在掃描 {len(reco_universe)} 檔標的計算評分，資料量較大可能需要數分鐘…"):
+        reco_table = recommend.build_recommendation_table(reco_universe, period, risk_free_rate)
     if reco_table.empty:
-        st.warning("無足夠資料產生建議，請確認股票代號或時間範圍。")
+        st.warning("無足夠資料產生建議，請確認時間範圍。")
     else:
         buy_df, sell_df = recommend.top_buy_sell(reco_table, top_n)
         buy_df = recommend.add_price_targets(buy_df, "buy")
@@ -232,6 +217,6 @@ with tab_reco:
 
         if len(buy_df) < top_n:
             st.info(
-                f"目前清單共 {len(reco_table)} 檔標的，為避免買入／賣出名單重複，"
+                f"目前範圍共 {len(reco_table)} 檔標的，為避免買入／賣出名單重複，"
                 f"已各自裁切為 {len(buy_df)} 檔（最多取清單一半），而非選擇的 Top {top_n}。"
             )
